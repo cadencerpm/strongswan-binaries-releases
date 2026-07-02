@@ -9,6 +9,7 @@ DIST_DIR="${DIST_DIR:-${REPO_ROOT}/dist}"
 ROOTFS_TAR="${ROOTFS_TAR:-${DIST_DIR}/${ARTIFACT_BASENAME}-rootfs.tar}"
 MANIFEST="${MANIFEST:-${DIST_DIR}/${ARTIFACT_BASENAME}-package-manifest.tsv}"
 SHA256SUMS="${SHA256SUMS:-${DIST_DIR}/SHA256SUMS}"
+SMOKE_TEST_TMP_DIR=""
 
 log() {
   printf '[test-rootfs] %s\n' "$*" >&2
@@ -17,6 +18,12 @@ log() {
 fail() {
   printf '[test-rootfs] %s\n' "$*" >&2
   exit 1
+}
+
+cleanup_tmp_dir() {
+  if [[ -n "${SMOKE_TEST_TMP_DIR}" ]]; then
+    rm -rf "${SMOKE_TEST_TMP_DIR}"
+  fi
 }
 
 require_file() {
@@ -75,54 +82,53 @@ main() {
 
   check_sha256sums
 
-  local tmp_dir
-  tmp_dir="$(mktemp -d)"
-  trap 'rm -rf "${tmp_dir}"' EXIT
+  SMOKE_TEST_TMP_DIR="$(mktemp -d)"
+  trap cleanup_tmp_dir EXIT
 
   log "extracting ${ROOTFS_TAR} for smoke checks"
   if tar --version 2>/dev/null | grep -qi 'gnu tar'; then
-    tar --no-same-owner -xf "${ROOTFS_TAR}" -C "${tmp_dir}"
+    tar --no-same-owner -xf "${ROOTFS_TAR}" -C "${SMOKE_TEST_TMP_DIR}"
   else
-    tar -xf "${ROOTFS_TAR}" -C "${tmp_dir}"
+    tar -xf "${ROOTFS_TAR}" -C "${SMOKE_TEST_TMP_DIR}"
   fi
 
-  require_path "${tmp_dir}" /usr/sbin/ipsec
-  require_path "${tmp_dir}" /usr/lib/ipsec/charon
-  require_path "${tmp_dir}" /usr/sbin/ip
-  require_path "${tmp_dir}" /usr/bin/jq
-  require_path "${tmp_dir}" /usr/sbin/conntrack
-  require_path "${tmp_dir}" /usr/bin/tcpdump
-  require_path "${tmp_dir}" /usr/bin/nc.traditional
-  require_path "${tmp_dir}" /usr/bin/chmod
-  require_path "${tmp_dir}" /usr/bin/sleep
-  require_path "${tmp_dir}" /usr/bin/uname
-  require_path "${tmp_dir}" /usr/bin/grep
-  require_path "${tmp_dir}" /usr/bin/pgrep
-  require_path "${tmp_dir}" /usr/bin/sed
-  require_path "${tmp_dir}" /usr/bin/tar
-  require_path "${tmp_dir}" /usr/bin/mawk
-  require_path "${tmp_dir}" /bin/bash
-  require_path "${tmp_dir}" /etc/passwd
-  require_path "${tmp_dir}" /etc/group
-  require_path "${tmp_dir}" /var/lib/dpkg/status
-  require_symlink "${tmp_dir}" /bin/sh /bin/dash
-  require_symlink "${tmp_dir}" /usr/bin/awk /usr/bin/mawk
-  require_symlink "${tmp_dir}" /usr/bin/nc /usr/bin/nc.traditional
+  require_path "${SMOKE_TEST_TMP_DIR}" /usr/sbin/ipsec
+  require_path "${SMOKE_TEST_TMP_DIR}" /usr/lib/ipsec/charon
+  require_path "${SMOKE_TEST_TMP_DIR}" /usr/sbin/ip
+  require_path "${SMOKE_TEST_TMP_DIR}" /usr/bin/jq
+  require_path "${SMOKE_TEST_TMP_DIR}" /usr/sbin/conntrack
+  require_path "${SMOKE_TEST_TMP_DIR}" /usr/bin/tcpdump
+  require_path "${SMOKE_TEST_TMP_DIR}" /usr/bin/nc.traditional
+  require_path "${SMOKE_TEST_TMP_DIR}" /usr/bin/chmod
+  require_path "${SMOKE_TEST_TMP_DIR}" /usr/bin/sleep
+  require_path "${SMOKE_TEST_TMP_DIR}" /usr/bin/uname
+  require_path "${SMOKE_TEST_TMP_DIR}" /usr/bin/grep
+  require_path "${SMOKE_TEST_TMP_DIR}" /usr/bin/pgrep
+  require_path "${SMOKE_TEST_TMP_DIR}" /usr/bin/sed
+  require_path "${SMOKE_TEST_TMP_DIR}" /usr/bin/tar
+  require_path "${SMOKE_TEST_TMP_DIR}" /usr/bin/mawk
+  require_path "${SMOKE_TEST_TMP_DIR}" /bin/bash
+  require_path "${SMOKE_TEST_TMP_DIR}" /etc/passwd
+  require_path "${SMOKE_TEST_TMP_DIR}" /etc/group
+  require_path "${SMOKE_TEST_TMP_DIR}" /var/lib/dpkg/status
+  require_symlink "${SMOKE_TEST_TMP_DIR}" /bin/sh /bin/dash
+  require_symlink "${SMOKE_TEST_TMP_DIR}" /usr/bin/awk /usr/bin/mawk
+  require_symlink "${SMOKE_TEST_TMP_DIR}" /usr/bin/nc /usr/bin/nc.traditional
 
-  require_path "${tmp_dir}" /usr/sbin/iptables-nft
-  require_path "${tmp_dir}" /usr/sbin/ip6tables-nft
-  require_symlink "${tmp_dir}" /usr/sbin/iptables /usr/sbin/iptables-nft
-  require_symlink "${tmp_dir}" /usr/sbin/ip6tables /usr/sbin/ip6tables-nft
+  require_path "${SMOKE_TEST_TMP_DIR}" /usr/sbin/iptables-nft
+  require_path "${SMOKE_TEST_TMP_DIR}" /usr/sbin/ip6tables-nft
+  require_symlink "${SMOKE_TEST_TMP_DIR}" /usr/sbin/iptables /usr/sbin/iptables-nft
+  require_symlink "${SMOKE_TEST_TMP_DIR}" /usr/sbin/ip6tables /usr/sbin/ip6tables-nft
 
-  require_glob "${tmp_dir}/usr/lib/ipsec/plugins/libstrongswan-*.so"
-  require_glob "${tmp_dir}/var/lib/dpkg/status.d/strongswan-charon"
-  require_glob "${tmp_dir}/var/lib/dpkg/status.d/iptables"
+  require_glob "${SMOKE_TEST_TMP_DIR}/usr/lib/ipsec/plugins/libstrongswan-*.so"
+  require_glob "${SMOKE_TEST_TMP_DIR}/var/lib/dpkg/status.d/strongswan-charon"
+  require_glob "${SMOKE_TEST_TMP_DIR}/var/lib/dpkg/status.d/iptables"
 
   grep -q $'^strongswan-charon\t' "${MANIFEST}" || fail "manifest missing strongswan-charon"
   grep -q $'^iptables\t' "${MANIFEST}" || fail "manifest missing iptables"
-  grep -q '^Package: strongswan-charon$' "${tmp_dir}/var/lib/dpkg/status" || fail "dpkg status missing strongswan-charon"
-  grep -q '^root:' "${tmp_dir}/etc/passwd" || fail "passwd missing root entry"
-  grep -q '^root:' "${tmp_dir}/etc/group" || fail "group missing root entry"
+  grep -q '^Package: strongswan-charon$' "${SMOKE_TEST_TMP_DIR}/var/lib/dpkg/status" || fail "dpkg status missing strongswan-charon"
+  grep -q '^root:' "${SMOKE_TEST_TMP_DIR}/etc/passwd" || fail "passwd missing root entry"
+  grep -q '^root:' "${SMOKE_TEST_TMP_DIR}/etc/group" || fail "group missing root entry"
 
   log "rootfs smoke checks passed"
 }
