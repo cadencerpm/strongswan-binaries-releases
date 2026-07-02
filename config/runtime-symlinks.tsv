@@ -1,0 +1,11 @@
+# link	target
+# These are normally created by maintainer scripts or update-alternatives during
+# a full Debian install. The rootfs build extracts package data directly, so keep
+# this small list explicit and deterministic.
+/bin/sh	/bin/dash
+/usr/sbin/ip6tables	/usr/sbin/ip6tables-nft
+/usr/sbin/ip6tables-restore	/usr/sbin/ip6tables-nft-restore
+/usr/sbin/ip6tables-save	/usr/sbin/ip6tables-nft-save
+/usr/sbin/iptables	/usr/sbin/iptables-nft
+/usr/sbin/iptables-restore	/usr/sbin/iptables-nft-restore
+/usr/sbin/iptables-save	/usr/sbin/iptables-nft-save

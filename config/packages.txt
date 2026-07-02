@@ -1,0 +1,17 @@
+# Cadence MLLP strongSwan runtime root packages.
+bash
+conntrack
+coreutils
+dash
+grep
+iproute2
+iptables
+jq
+kmod
+libcharon-extra-plugins
+libstrongswan-standard-plugins
+netcat-traditional
+procps
+strongswan-charon
+strongswan-starter
+tcpdump
