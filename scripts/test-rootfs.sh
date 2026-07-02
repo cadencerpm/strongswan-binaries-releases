@@ -110,10 +110,13 @@ main() {
   require_path "${SMOKE_TEST_TMP_DIR}" /bin/bash
   require_path "${SMOKE_TEST_TMP_DIR}" /etc/passwd
   require_path "${SMOKE_TEST_TMP_DIR}" /etc/group
+  require_path "${SMOKE_TEST_TMP_DIR}" /etc/ld.so.cache
   require_path "${SMOKE_TEST_TMP_DIR}" /var/lib/dpkg/status
   require_symlink "${SMOKE_TEST_TMP_DIR}" /bin/sh /bin/dash
   require_symlink "${SMOKE_TEST_TMP_DIR}" /usr/bin/awk /usr/bin/mawk
   require_symlink "${SMOKE_TEST_TMP_DIR}" /usr/bin/nc /usr/bin/nc.traditional
+  require_symlink "${SMOKE_TEST_TMP_DIR}" /var/run /run
+  require_symlink "${SMOKE_TEST_TMP_DIR}" /var/lock /run/lock
 
   require_path "${SMOKE_TEST_TMP_DIR}" /usr/sbin/iptables-nft
   require_path "${SMOKE_TEST_TMP_DIR}" /usr/sbin/ip6tables-nft
@@ -129,6 +132,8 @@ main() {
   grep -q '^Package: strongswan-charon$' "${SMOKE_TEST_TMP_DIR}/var/lib/dpkg/status" || fail "dpkg status missing strongswan-charon"
   grep -q '^root:' "${SMOKE_TEST_TMP_DIR}/etc/passwd" || fail "passwd missing root entry"
   grep -q '^root:' "${SMOKE_TEST_TMP_DIR}/etc/group" || fail "group missing root entry"
+  grep -q '^tcpdump:' "${SMOKE_TEST_TMP_DIR}/etc/passwd" || fail "passwd missing tcpdump entry"
+  grep -q '^tcpdump:' "${SMOKE_TEST_TMP_DIR}/etc/group" || fail "group missing tcpdump entry"
 
   log "rootfs smoke checks passed"
 }

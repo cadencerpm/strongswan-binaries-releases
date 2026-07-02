@@ -203,6 +203,83 @@ materialize_base_passwd_files() {
   fi
 }
 
+record_name_exists() {
+  local file="$1"
+  local name="$2"
+
+  awk -F: -v name="${name}" '$1 == name { found = 1 } END { exit found ? 0 : 1 }' "${file}"
+}
+
+record_id_exists() {
+  local file="$1"
+  local id="$2"
+
+  awk -F: -v id="${id}" '$3 == id { found = 1 } END { exit found ? 0 : 1 }' "${file}"
+}
+
+record_id_for_name() {
+  local file="$1"
+  local name="$2"
+
+  awk -F: -v name="${name}" '$1 == name { print $3; exit }' "${file}"
+}
+
+next_free_system_id() {
+  local passwd_file="$1"
+  local group_file="$2"
+  local id
+
+  for id in {900..999}; do
+    if ! record_id_exists "${passwd_file}" "${id}" && ! record_id_exists "${group_file}" "${id}"; then
+      printf '%s\n' "${id}"
+      return
+    fi
+  done
+
+  printf 'could not find free deterministic system uid/gid in 900..999\n' >&2
+  exit 1
+}
+
+materialize_tcpdump_user() {
+  local passwd_file="${ROOTFS_DIR}/etc/passwd"
+  local group_file="${ROOTFS_DIR}/etc/group"
+  local tcpdump_gid tcpdump_uid
+
+  if record_name_exists "${group_file}" tcpdump; then
+    tcpdump_gid="$(record_id_for_name "${group_file}" tcpdump)"
+  else
+    tcpdump_gid="$(next_free_system_id "${passwd_file}" "${group_file}")"
+    printf 'tcpdump:x:%s:\n' "${tcpdump_gid}" >>"${group_file}"
+  fi
+
+  if record_name_exists "${passwd_file}" tcpdump; then
+    return
+  fi
+
+  tcpdump_uid="${tcpdump_gid}"
+  if record_id_exists "${passwd_file}" "${tcpdump_uid}"; then
+    tcpdump_uid="$(next_free_system_id "${passwd_file}" "${group_file}")"
+  fi
+
+  printf 'tcpdump:x:%s:%s:tcpdump:/nonexistent:/usr/sbin/nologin\n' "${tcpdump_uid}" "${tcpdump_gid}" >>"${passwd_file}"
+}
+
+materialize_base_files_runtime_links() {
+  mkdir -p "${ROOTFS_DIR}/run/lock" "${ROOTFS_DIR}/var"
+  rm -rf "${ROOTFS_DIR}/var/run" "${ROOTFS_DIR}/var/lock"
+  ln -s /run "${ROOTFS_DIR}/var/run"
+  ln -s /run/lock "${ROOTFS_DIR}/var/lock"
+}
+
+generate_ld_so_cache() {
+  [[ -x "${ROOTFS_DIR}/sbin/ldconfig" || -x "${ROOTFS_DIR}/usr/sbin/ldconfig" ]] || {
+    printf 'rootfs is missing ldconfig; cannot generate ld.so.cache\n' >&2
+    exit 1
+  }
+
+  ldconfig -r "${ROOTFS_DIR}"
+}
+
 write_status_file() {
   local deb="$1"
   local package_name="$2"
@@ -246,7 +323,9 @@ build_rootfs() {
   require_command awk
   require_command dpkg-deb
   require_command find
+  require_command grep
   require_command install
+  require_command ldconfig
   require_command sed
   require_command sha256sum
   require_command sort
@@ -330,6 +409,9 @@ build_rootfs() {
 
   apply_runtime_symlinks
   materialize_base_passwd_files
+  materialize_tcpdump_user
+  materialize_base_files_runtime_links
+  generate_ld_so_cache
 
   log "creating deterministic rootfs tar"
   rm -f "${ROOTFS_TAR}" "${SHA256SUMS}"

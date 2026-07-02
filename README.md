@@ -33,7 +33,8 @@ The root package set is in [config/packages.txt](config/packages.txt). The
 build resolves that package set with recommends and suggests disabled, downloads
 the complete package closure for `arm64`, extracts each `.deb` into a staging
 rootfs, adds deterministic dpkg status metadata, materializes the `base-passwd`
-master passwd/group files, applies the runtime symlinks in
+master passwd/group files, adds direct-extraction runtime metadata such as the
+`tcpdump` user and `ld.so.cache`, applies the runtime symlinks in
 [config/runtime-symlinks.tsv](config/runtime-symlinks.tsv), and emits a
 deterministic tar with a fixed build umask.
 
