@@ -32,9 +32,10 @@ deb [arch=arm64] https://snapshot.debian.org/archive/debian-security/20260629T00
 The root package set is in [config/packages.txt](config/packages.txt). The
 build resolves that package set with recommends and suggests disabled, downloads
 the complete package closure for `arm64`, extracts each `.deb` into a staging
-rootfs, adds deterministic dpkg status metadata, applies the runtime symlinks in
+rootfs, adds deterministic dpkg status metadata, materializes the `base-passwd`
+master passwd/group files, applies the runtime symlinks in
 [config/runtime-symlinks.tsv](config/runtime-symlinks.tsv), and emits a
-deterministic tar.
+deterministic tar with a fixed build umask.
 
 Before downloading the runtime package set, the builder seeds every package
 marked `Essential: yes` in the pinned apt metadata for the target architecture.

@@ -100,11 +100,13 @@ main() {
   require_path "${tmp_dir}" /usr/bin/pgrep
   require_path "${tmp_dir}" /usr/bin/sed
   require_path "${tmp_dir}" /usr/bin/tar
+  require_path "${tmp_dir}" /usr/bin/mawk
   require_path "${tmp_dir}" /bin/bash
   require_path "${tmp_dir}" /etc/passwd
   require_path "${tmp_dir}" /etc/group
   require_path "${tmp_dir}" /var/lib/dpkg/status
   require_symlink "${tmp_dir}" /bin/sh /bin/dash
+  require_symlink "${tmp_dir}" /usr/bin/awk /usr/bin/mawk
   require_symlink "${tmp_dir}" /usr/bin/nc /usr/bin/nc.traditional
 
   require_path "${tmp_dir}" /usr/sbin/iptables-nft
@@ -119,6 +121,8 @@ main() {
   grep -q $'^strongswan-charon\t' "${MANIFEST}" || fail "manifest missing strongswan-charon"
   grep -q $'^iptables\t' "${MANIFEST}" || fail "manifest missing iptables"
   grep -q '^Package: strongswan-charon$' "${tmp_dir}/var/lib/dpkg/status" || fail "dpkg status missing strongswan-charon"
+  grep -q '^root:' "${tmp_dir}/etc/passwd" || fail "passwd missing root entry"
+  grep -q '^root:' "${tmp_dir}/etc/group" || fail "group missing root entry"
 
   log "rootfs smoke checks passed"
 }

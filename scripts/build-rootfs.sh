@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 022
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
@@ -178,6 +179,30 @@ apply_runtime_symlinks() {
   done <"${SYMLINKS_FILE}"
 }
 
+materialize_base_passwd_files() {
+  local etc_dir="${ROOTFS_DIR}/etc"
+  local passwd_master="${ROOTFS_DIR}/usr/share/base-passwd/passwd.master"
+  local group_master="${ROOTFS_DIR}/usr/share/base-passwd/group.master"
+
+  mkdir -p "${etc_dir}"
+
+  if [[ ! -e "${etc_dir}/passwd" ]]; then
+    [[ -f "${passwd_master}" ]] || {
+      printf 'missing base-passwd master file: %s\n' "${passwd_master}" >&2
+      exit 1
+    }
+    install -m 0644 "${passwd_master}" "${etc_dir}/passwd"
+  fi
+
+  if [[ ! -e "${etc_dir}/group" ]]; then
+    [[ -f "${group_master}" ]] || {
+      printf 'missing base-passwd master file: %s\n' "${group_master}" >&2
+      exit 1
+    }
+    install -m 0644 "${group_master}" "${etc_dir}/group"
+  fi
+}
+
 write_status_file() {
   local deb="$1"
   local package_name="$2"
@@ -221,6 +246,7 @@ build_rootfs() {
   require_command awk
   require_command dpkg-deb
   require_command find
+  require_command install
   require_command sed
   require_command sha256sum
   require_command sort
@@ -303,6 +329,7 @@ build_rootfs() {
   done
 
   apply_runtime_symlinks
+  materialize_base_passwd_files
 
   log "creating deterministic rootfs tar"
   rm -f "${ROOTFS_TAR}" "${SHA256SUMS}"
