@@ -92,13 +92,20 @@ main() {
   require_path "${tmp_dir}" /usr/bin/jq
   require_path "${tmp_dir}" /usr/sbin/conntrack
   require_path "${tmp_dir}" /usr/bin/tcpdump
+  require_path "${tmp_dir}" /usr/bin/nc.traditional
   require_path "${tmp_dir}" /usr/bin/chmod
   require_path "${tmp_dir}" /usr/bin/sleep
   require_path "${tmp_dir}" /usr/bin/uname
   require_path "${tmp_dir}" /usr/bin/grep
   require_path "${tmp_dir}" /usr/bin/pgrep
+  require_path "${tmp_dir}" /usr/bin/sed
+  require_path "${tmp_dir}" /usr/bin/tar
   require_path "${tmp_dir}" /bin/bash
+  require_path "${tmp_dir}" /etc/passwd
+  require_path "${tmp_dir}" /etc/group
+  require_path "${tmp_dir}" /var/lib/dpkg/status
   require_symlink "${tmp_dir}" /bin/sh /bin/dash
+  require_symlink "${tmp_dir}" /usr/bin/nc /usr/bin/nc.traditional
 
   require_path "${tmp_dir}" /usr/sbin/iptables-nft
   require_path "${tmp_dir}" /usr/sbin/ip6tables-nft
@@ -111,6 +118,7 @@ main() {
 
   grep -q $'^strongswan-charon\t' "${MANIFEST}" || fail "manifest missing strongswan-charon"
   grep -q $'^iptables\t' "${MANIFEST}" || fail "manifest missing iptables"
+  grep -q '^Package: strongswan-charon$' "${tmp_dir}/var/lib/dpkg/status" || fail "dpkg status missing strongswan-charon"
 
   log "rootfs smoke checks passed"
 }

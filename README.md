@@ -36,6 +36,11 @@ rootfs, adds deterministic dpkg status metadata, applies the runtime symlinks in
 [config/runtime-symlinks.tsv](config/runtime-symlinks.tsv), and emits a
 deterministic tar.
 
+Before downloading the runtime package set, the builder seeds every package
+marked `Essential: yes` in the pinned apt metadata for the target architecture.
+That keeps the extracted rootfs compatible with Debian package assumptions even
+though maintainer scripts are not run.
+
 The manifest records every downloaded `.deb` with package name, version,
 architecture, SHA256, and filename.
 

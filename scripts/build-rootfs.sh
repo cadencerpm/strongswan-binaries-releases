@@ -83,6 +83,31 @@ read_packages() {
   sed -e 's/[[:space:]]*#.*$//' -e '/^[[:space:]]*$/d' "${PACKAGES_FILE}"
 }
 
+resolve_essential_packages() {
+  apt-cache "${apt_args[@]}" dumpavail | awk -v target_arch="${TARGET_ARCH}" '
+    BEGIN { RS = ""; FS = "\n" }
+    {
+      package_name = "";
+      architecture = "";
+      essential = "no";
+
+      for (i = 1; i <= NF; i++) {
+        if ($i ~ /^Package: /) {
+          package_name = substr($i, 10);
+        } else if ($i ~ /^Architecture: /) {
+          architecture = substr($i, 15);
+        } else if ($i ~ /^Essential: /) {
+          essential = tolower(substr($i, 12));
+        }
+      }
+
+      if (package_name != "" && essential == "yes" && (architecture == target_arch || architecture == "all")) {
+        print package_name;
+      }
+    }
+  ' | sort -u
+}
+
 apt_option_args() {
   printf '%s\0' \
     -o "APT::Architecture=${TARGET_ARCH}" \
@@ -192,6 +217,7 @@ ensure_build_ca_certificates() {
 
 build_rootfs() {
   require_command apt-get
+  require_command apt-cache
   require_command awk
   require_command dpkg-deb
   require_command find
@@ -234,8 +260,11 @@ build_rootfs() {
       continue
     fi
 
-    log "resolving and downloading ${#packages[@]} root packages for ${TARGET_ARCH} from ${snapshot_host}"
-    if run_with_retries "apt package download from ${snapshot_host}" apt-get "${apt_args[@]}" install "${packages[@]}"; then
+    mapfile -t essential_packages < <(resolve_essential_packages)
+    mapfile -t install_packages < <(printf '%s\n' "${essential_packages[@]}" "${packages[@]}" | sort -u)
+
+    log "resolving and downloading ${#install_packages[@]} packages for ${TARGET_ARCH} from ${snapshot_host} (${#packages[@]} configured, ${#essential_packages[@]} essential)"
+    if run_with_retries "apt package download from ${snapshot_host}" apt-get "${apt_args[@]}" install "${install_packages[@]}"; then
       download_succeeded=1
       break
     fi
@@ -256,6 +285,8 @@ build_rootfs() {
 
   log "extracting ${#debs[@]} Debian packages"
   printf 'package\tversion\tarchitecture\tsha256\tdeb\n' >"${MANIFEST}"
+  mkdir -p "${ROOTFS_DIR}/var/lib/dpkg"
+  : >"${ROOTFS_DIR}/var/lib/dpkg/status"
   for deb in "${debs[@]}"; do
     local package_name version architecture sha deb_name
     package_name="$(dpkg-deb -f "${deb}" Package)"
@@ -266,6 +297,8 @@ build_rootfs() {
 
     dpkg-deb -x "${deb}" "${ROOTFS_DIR}"
     write_status_file "${deb}" "${package_name}"
+    cat "${ROOTFS_DIR}/var/lib/dpkg/status.d/${package_name}" >>"${ROOTFS_DIR}/var/lib/dpkg/status"
+    printf '\n' >>"${ROOTFS_DIR}/var/lib/dpkg/status"
     printf '%s\t%s\t%s\t%s\t%s\n' "${package_name}" "${version}" "${architecture}" "${sha}" "${deb_name}" >>"${MANIFEST}"
   done
 
