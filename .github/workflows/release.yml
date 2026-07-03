@@ -10,8 +10,8 @@ on:
       - "v*"
 
 concurrency:
-  group: strongswan-rootfs-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.ref == 'refs/heads/main' && format('strongswan-rootfs-{0}', github.sha) || format('strongswan-rootfs-{0}', github.ref) }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build:

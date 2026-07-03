@@ -76,10 +76,10 @@ make clean
 ## Release
 
 `.github/workflows/release.yml` builds and tests on pull requests, manual
-dispatch, `main` pushes, and tags. `main` pushes publish the tar, manifest, and
-`SHA256SUMS` as GitHub Release assets under an immutable `main-<short-sha>` tag.
-Tag builds also publish the same assets under the pushed tag. The workflow uses
-only public Debian snapshot inputs and the repository `GITHUB_TOKEN`.
+dispatch, `main` pushes, and tags. Each `main` push publishes the tar, manifest,
+and `SHA256SUMS` as GitHub Release assets under an immutable `main-<short-sha>`
+tag. Tag builds also publish the same assets under the pushed tag. The workflow
+uses only public Debian snapshot inputs and the repository `GITHUB_TOKEN`.
 
 ## Later Cadence Monorepo Consumption
 
