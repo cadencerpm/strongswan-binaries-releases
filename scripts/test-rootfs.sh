@@ -4,7 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
-ARTIFACT_BASENAME="${ARTIFACT_BASENAME:-strongswan-trixie-arm64}"
+STRONGSWAN_VERSION="${STRONGSWAN_VERSION:-6.0.7}"
+ARTIFACT_BASENAME="${ARTIFACT_BASENAME:-strongswan-${STRONGSWAN_VERSION}-trixie-arm64}"
 DIST_DIR="${DIST_DIR:-${REPO_ROOT}/dist}"
 ROOTFS_TAR="${ROOTFS_TAR:-${DIST_DIR}/${ARTIFACT_BASENAME}-rootfs.tar}"
 MANIFEST="${MANIFEST:-${DIST_DIR}/${ARTIFACT_BASENAME}-package-manifest.tsv}"
@@ -94,6 +95,8 @@ main() {
 
   require_path "${SMOKE_TEST_TMP_DIR}" /usr/sbin/ipsec
   require_path "${SMOKE_TEST_TMP_DIR}" /usr/lib/ipsec/charon
+  require_path "${SMOKE_TEST_TMP_DIR}" /usr/lib/ipsec/starter
+  require_path "${SMOKE_TEST_TMP_DIR}" /usr/lib/ipsec/stroke
   require_path "${SMOKE_TEST_TMP_DIR}" /usr/sbin/ip
   require_path "${SMOKE_TEST_TMP_DIR}" /usr/bin/jq
   require_path "${SMOKE_TEST_TMP_DIR}" /usr/sbin/conntrack
@@ -124,12 +127,10 @@ main() {
   require_symlink "${SMOKE_TEST_TMP_DIR}" /usr/sbin/ip6tables /usr/sbin/ip6tables-nft
 
   require_glob "${SMOKE_TEST_TMP_DIR}/usr/lib/ipsec/plugins/libstrongswan-*.so"
-  require_glob "${SMOKE_TEST_TMP_DIR}/var/lib/dpkg/status.d/strongswan-charon"
   require_glob "${SMOKE_TEST_TMP_DIR}/var/lib/dpkg/status.d/iptables"
 
-  grep -q $'^strongswan-charon\t' "${MANIFEST}" || fail "manifest missing strongswan-charon"
+  grep -q $'^strongswan-upstream\t'"${STRONGSWAN_VERSION}"$'\t' "${MANIFEST}" || fail "manifest missing strongswan-upstream ${STRONGSWAN_VERSION}"
   grep -q $'^iptables\t' "${MANIFEST}" || fail "manifest missing iptables"
-  grep -q '^Package: strongswan-charon$' "${SMOKE_TEST_TMP_DIR}/var/lib/dpkg/status" || fail "dpkg status missing strongswan-charon"
   grep -q '^root:' "${SMOKE_TEST_TMP_DIR}/etc/passwd" || fail "passwd missing root entry"
   grep -q '^root:' "${SMOKE_TEST_TMP_DIR}/etc/group" || fail "group missing root entry"
   grep -q '^tcpdump:' "${SMOKE_TEST_TMP_DIR}/etc/passwd" || fail "passwd missing tcpdump entry"
