@@ -1,0 +1,3 @@
+deb [arch=arm64] https://snapshot.debian.org/archive/debian/20260501T205709Z trixie main
+deb [arch=arm64] https://snapshot.debian.org/archive/debian/20260501T205709Z trixie-updates main
+deb [arch=arm64] https://snapshot.debian.org/archive/debian-security/20260629T000000Z trixie-security main
