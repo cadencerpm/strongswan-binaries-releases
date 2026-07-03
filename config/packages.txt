@@ -8,10 +8,10 @@ iproute2
 iptables
 jq
 kmod
-libcharon-extra-plugins
-libstrongswan-standard-plugins
+libcap2
+libgmp10
+libssl3t64
 netcat-traditional
+openssl-provider-legacy
 procps
-strongswan-charon
-strongswan-starter
 tcpdump

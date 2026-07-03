@@ -5,12 +5,16 @@ umask 022
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
-ARTIFACT_BASENAME="${ARTIFACT_BASENAME:-strongswan-trixie-arm64}"
+STRONGSWAN_VERSION="${STRONGSWAN_VERSION:-6.0.7}"
+STRONGSWAN_SOURCE_URL="${STRONGSWAN_SOURCE_URL:-https://download.strongswan.org/strongswan-${STRONGSWAN_VERSION}.tar.bz2}"
+STRONGSWAN_SOURCE_SHA256="${STRONGSWAN_SOURCE_SHA256:-e518e34e159514f4c6ba80d1f926cb151e0dd4e3a1d94213171234b8b9ae6f55}"
+ARTIFACT_BASENAME="${ARTIFACT_BASENAME:-strongswan-${STRONGSWAN_VERSION}-trixie-arm64}"
 TARGET_ARCH="${TARGET_ARCH:-arm64}"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-0}"
 DOCKER_IMAGE="${DOCKER_IMAGE:-debian:trixie-slim}"
 SNAPSHOT_HOSTS="${SNAPSHOT_HOSTS:-snapshot-cloudflare.debian.org snapshot.debian.org}"
 DOWNLOAD_ATTEMPTS="${DOWNLOAD_ATTEMPTS:-3}"
+MAKE_JOBS="${MAKE_JOBS:-}"
 
 CONFIG_DIR="${REPO_ROOT}/config"
 PACKAGES_FILE="${PACKAGES_FILE:-${CONFIG_DIR}/packages.txt}"
@@ -20,6 +24,8 @@ SYMLINKS_FILE="${SYMLINKS_FILE:-${CONFIG_DIR}/runtime-symlinks.tsv}"
 BUILD_DIR="${BUILD_DIR:-${REPO_ROOT}/build/${ARTIFACT_BASENAME}}"
 DIST_DIR="${DIST_DIR:-${REPO_ROOT}/dist}"
 ROOTFS_DIR="${BUILD_DIR}/rootfs"
+STRONGSWAN_SOURCE_TARBALL="${BUILD_DIR}/strongswan-${STRONGSWAN_VERSION}.tar.bz2"
+STRONGSWAN_SOURCE_DIR="${BUILD_DIR}/strongswan-${STRONGSWAN_VERSION}"
 APT_STATE_DIR="${BUILD_DIR}/apt-state"
 APT_LISTS_DIR="${APT_STATE_DIR}/lists"
 APT_STATUS_FILE="${APT_STATE_DIR}/status"
@@ -60,12 +66,16 @@ run_in_docker_if_needed() {
     --rm
     --platform "linux/${TARGET_ARCH}"
     -e STRONGSWAN_ROOTFS_IN_CONTAINER=1
+    -e STRONGSWAN_VERSION
+    -e STRONGSWAN_SOURCE_URL
+    -e STRONGSWAN_SOURCE_SHA256
     -e ARTIFACT_BASENAME
     -e TARGET_ARCH
     -e SOURCE_DATE_EPOCH
     -e DOCKER_IMAGE
     -e SNAPSHOT_HOSTS
     -e DOWNLOAD_ATTEMPTS
+    -e MAKE_JOBS
     -e HOST_UID="$(id -u)"
     -e HOST_GID="$(id -g)"
     -v "${REPO_ROOT}:/work"
@@ -303,18 +313,114 @@ write_status_file() {
   ' >"${status_file}"
 }
 
-ensure_build_ca_certificates() {
+ensure_build_dependencies() {
   if [[ "${STRONGSWAN_ROOTFS_IN_CONTAINER:-}" != "1" ]]; then
     return
   fi
 
-  if [[ -s /etc/ssl/certs/ca-certificates.crt ]]; then
-    return
+  log "installing source build dependencies in ephemeral build container"
+  DEBIAN_FRONTEND=noninteractive apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
+    bzip2 \
+    build-essential \
+    ca-certificates \
+    curl \
+    libcap-dev \
+    libgmp-dev \
+    libssl-dev \
+    pkg-config
+}
+
+download_strongswan_source() {
+  require_command curl
+
+  log "downloading strongSwan ${STRONGSWAN_VERSION} from ${STRONGSWAN_SOURCE_URL}"
+  curl \
+    --fail \
+    --location \
+    --retry "${DOWNLOAD_ATTEMPTS}" \
+    --retry-delay 5 \
+    --show-error \
+    --silent \
+    --output "${STRONGSWAN_SOURCE_TARBALL}" \
+    "${STRONGSWAN_SOURCE_URL}"
+
+  local actual_sha
+  actual_sha="$(sha256sum "${STRONGSWAN_SOURCE_TARBALL}" | awk '{ print $1 }')"
+  if [[ "${actual_sha}" != "${STRONGSWAN_SOURCE_SHA256}" ]]; then
+    printf 'strongSwan source SHA256 mismatch: got %s, expected %s\n' "${actual_sha}" "${STRONGSWAN_SOURCE_SHA256}" >&2
+    exit 1
   fi
 
-  log "installing ca-certificates in ephemeral build container"
-  DEBIAN_FRONTEND=noninteractive apt-get update
-  DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends ca-certificates
+  tar -xf "${STRONGSWAN_SOURCE_TARBALL}" -C "${BUILD_DIR}"
+  [[ -d "${STRONGSWAN_SOURCE_DIR}" ]] || {
+    printf 'strongSwan source archive did not create %s\n' "${STRONGSWAN_SOURCE_DIR}" >&2
+    exit 1
+  }
+}
+
+make_jobs() {
+  if [[ -n "${MAKE_JOBS}" ]]; then
+    printf '%s\n' "${MAKE_JOBS}"
+  elif command -v nproc >/dev/null 2>&1; then
+    nproc
+  else
+    getconf _NPROCESSORS_ONLN 2>/dev/null || printf '2\n'
+  fi
+}
+
+build_strongswan_from_source() {
+  require_command make
+
+  local jobs
+  jobs="$(make_jobs)"
+
+  local configure_args=(
+    --prefix=/usr
+    --sysconfdir=/etc
+    --libdir=/usr/lib
+    --libexecdir=/usr/lib
+    --localstatedir=/var
+    --runstatedir=/run
+    --with-ipsecdir=/usr/lib/ipsec
+    --with-ipseclibdir=/usr/lib/ipsec
+    --with-plugindir=/usr/lib/ipsec/plugins
+    --with-capabilities=libcap
+    --enable-aes
+    --enable-ccm
+    --enable-chapoly
+    --enable-ctr
+    --enable-gcm
+    --enable-gmp
+    --enable-hmac
+    --enable-md5
+    --enable-mgf1
+    --enable-openssl
+    --enable-sha1
+    --enable-sha2
+    --enable-stroke
+    --enable-swanctl
+    --disable-systemd
+    --disable-blowfish
+    --disable-des
+    --disable-dependency-tracking
+    --enable-silent-rules
+  )
+
+  log "building strongSwan ${STRONGSWAN_VERSION} from source with ${jobs} jobs"
+  (
+    cd "${STRONGSWAN_SOURCE_DIR}"
+    ./configure "${configure_args[@]}"
+    make -j "${jobs}" V=0
+    make install DESTDIR="${ROOTFS_DIR}" V=0
+  )
+
+  find "${ROOTFS_DIR}/usr/lib" \( -name '*.la' -o -name '*.a' \) -delete
+  printf 'strongswan-upstream\t%s\t%s\t%s\t%s\n' \
+    "${STRONGSWAN_VERSION}" \
+    "${TARGET_ARCH}" \
+    "${STRONGSWAN_SOURCE_SHA256}" \
+    "$(basename -- "${STRONGSWAN_SOURCE_TARBALL}")" >>"${MANIFEST}"
 }
 
 build_rootfs() {
@@ -345,7 +451,8 @@ build_rootfs() {
   rm -rf "${BUILD_DIR}"
   mkdir -p "${ROOTFS_DIR}" "${DIST_DIR}"
 
-  ensure_build_ca_certificates
+  ensure_build_dependencies
+  download_strongswan_source
 
   local apt_args=()
   while IFS= read -r -d '' arg; do
@@ -389,7 +496,7 @@ build_rootfs() {
   fi
 
   log "extracting ${#debs[@]} Debian packages"
-  printf 'package\tversion\tarchitecture\tsha256\tdeb\n' >"${MANIFEST}"
+  printf 'package\tversion\tarchitecture\tsha256\tartifact\n' >"${MANIFEST}"
   mkdir -p "${ROOTFS_DIR}/var/lib/dpkg"
   : >"${ROOTFS_DIR}/var/lib/dpkg/status"
   for deb in "${debs[@]}"; do
@@ -407,6 +514,7 @@ build_rootfs() {
     printf '%s\t%s\t%s\t%s\t%s\n' "${package_name}" "${version}" "${architecture}" "${sha}" "${deb_name}" >>"${MANIFEST}"
   done
 
+  build_strongswan_from_source
   apply_runtime_symlinks
   materialize_base_passwd_files
   materialize_tcpdump_user

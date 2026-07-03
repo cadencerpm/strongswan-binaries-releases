@@ -32,10 +32,10 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: strongswan-trixie-arm64-rootfs
+          name: strongswan-rootfs
           path: |
-            dist/strongswan-trixie-arm64-rootfs.tar
-            dist/strongswan-trixie-arm64-package-manifest.tsv
+            dist/strongswan-*-rootfs.tar
+            dist/strongswan-*-package-manifest.tsv
             dist/SHA256SUMS
           if-no-files-found: error
 
@@ -50,7 +50,7 @@ jobs:
       - name: Download workflow artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: strongswan-trixie-arm64-rootfs
+          name: strongswan-rootfs
           path: dist
 
       - name: Publish release assets
@@ -72,8 +72,16 @@ jobs:
             release_args+=(--target "${GITHUB_SHA}" --prerelease --latest=false)
           fi
 
-          sha256="$(awk '$2 == "strongswan-trixie-arm64-rootfs.tar" { print $1 }' dist/SHA256SUMS)"
-          notes="$(printf 'strongSwan rootfs build for `%s`.\n\n- `strongswan-trixie-arm64-rootfs.tar`: `%s`\n' "${GITHUB_SHA}" "${sha256}")"
+          rootfs="$(awk '$2 ~ /^strongswan-.*-rootfs[.]tar$/ { print $2; exit }' dist/SHA256SUMS)"
+          sha256="$(awk -v rootfs="${rootfs}" '$2 == rootfs { print $1 }' dist/SHA256SUMS)"
+          if [[ -z "${rootfs}" || -z "${sha256}" ]]; then
+            echo "missing versioned rootfs entry in dist/SHA256SUMS" >&2
+            exit 1
+          fi
+
+          strongswan_version="${rootfs#strongswan-}"
+          strongswan_version="${strongswan_version%-trixie-arm64-rootfs.tar}"
+          notes="$(printf 'strongSwan `%s` rootfs build for `%s`.\n\n- `%s`: `%s`\n' "${strongswan_version}" "${GITHUB_SHA}" "${rootfs}" "${sha256}")"
 
           if gh release view "${tag_name}" >/dev/null 2>&1; then
             gh release upload "${tag_name}" dist/* --clobber
